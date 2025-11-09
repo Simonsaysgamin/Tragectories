@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "trajectories",
+  "version": "${version}",
+  "name": "Trajectories",
+  "description": "A simple trajectorys mod that is easy to integrate",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "net.Liziard.bows.trajectories.client.TrajectoriesDataGenerator"
+    ],
+    "client": [
+      "net.Liziard.bows.trajectories.client.TrajectoriesClient"
+    ],
+    "main": [
+      "net.Liziard.bows.trajectories.Trajectories"
+    ]
+  },
+  "mixins": [
+    "trajectories.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
