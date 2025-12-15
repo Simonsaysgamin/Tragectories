@@ -28,7 +28,10 @@ public class ProjectileTrajectoryRenderer {
     private static final int HARD_POINT_LIMIT = 20000; // safety cap to avoid runaway sim
     private static final double MULTISHOT_OFFSET_RAD = Math.toRadians(15); // crossbow multishot offset (wider for visibility)
 
-    // Remove all custom RenderLayer, VertexFormat, VertexFormats, MultiPhaseParameters code
+    // spawn parameters for thin, short-lived dust particles (approximating a single-pixel line)
+    private static final int MAX_PARTICLES_PER_FRAME = 40; // much fewer -> looks like a thin line
+    private static final double MIN_SPAWN_DISTANCE = 4.0; // avoid spawning very close to camera
+    private static final double MAX_SPAWN_DISTANCE = 60.0; // don't spawn beyond this distance
 
     public static void render(MatrixStack matrices, Camera camera, VertexConsumerProvider vertexConsumers) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -53,12 +56,10 @@ public class ProjectileTrajectoryRenderer {
         if (item instanceof CrossbowItem && !CrossbowItem.isCharged(stack)) return;
         if (item instanceof TridentItem && !using) return;
 
-        // Vec3d cameraPos = camera.getPos();
         Vec3d cameraPos = new Vec3d(camera.getFocusedEntity().getX(), camera.getFocusedEntity().getY(), camera.getFocusedEntity().getZ()); // Use focused entity's coordinates
 
         // Simulate one or multiple paths (multishot)
         List<PathResult> results = new ArrayList<>();
-        // Check for multishot enchantment - simpler approach without registry lookup
         boolean hasMultishot = item instanceof CrossbowItem &&
                 stack.getEnchantments().getEnchantments().stream()
                         .anyMatch(e -> e.matchesKey(Enchantments.MULTISHOT));
@@ -71,9 +72,9 @@ public class ProjectileTrajectoryRenderer {
             results.add(simulatePath(player, item, 0.0));
         }
 
-        // Render paths (rendering is currently a no-op stub)
+        // Draw a single-pixel thin line along each simulated path
         for (PathResult res : results) {
-            renderTrajectory(matrices, cameraPos, res.points);
+            renderLineAlongPath(matrices, client, camera, cameraPos, res.points, vertexConsumers);
         }
     }
 
@@ -241,25 +242,23 @@ public class ProjectileTrajectoryRenderer {
         return closestHit;
     }
 
-    private static void renderTrajectory(MatrixStack matrices, Vec3d cameraPos, List<Vec3d> points) {
-        // Lightweight particle-based line renderer: spawn particles along the simulated path.
-        // This avoids direct usage of RenderLayer / BufferBuilder while providing a visible
-        // trajectory in-game. We limit the number of particles per frame to avoid spamming.
+    private static void renderLineAlongPath(MatrixStack matrices, MinecraftClient client, Camera camera, Vec3d cameraPos, List<Vec3d> points, VertexConsumerProvider provider) {
         if (points == null || points.isEmpty()) return;
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || client.world == null) return;
 
-        int maxParticles = 200; // max particles to spawn per render call
         int total = points.size();
-        int step = Math.max(1, total / maxParticles);
+        int spawnCount = Math.min(MAX_PARTICLES_PER_FRAME, total);
+        double inv = (double) total / (double) spawnCount;
 
-        // spawn particles at world positions (use actual point coordinates)
-        int spawned = 0;
-        for (int i = 0; i < total && spawned < maxParticles; i += step) {
-            Vec3d p = points.get(i);
-            // small upward velocity to make them visible; zero is fine too
+        for (int s = 0; s < spawnCount; s++) {
+            int idx = Math.min(total - 1, (int) Math.floor(s * inv));
+            Vec3d p = points.get(idx);
+
+            double distSq = p.squaredDistanceTo(cameraPos);
+            if (distSq < MIN_SPAWN_DISTANCE * MIN_SPAWN_DISTANCE) continue;
+            if (distSq > MAX_SPAWN_DISTANCE * MAX_SPAWN_DISTANCE) continue;
+
+            // Spawn a single small END_ROD particle at the sampled point. This looks like a thin dot.
             client.particleManager.addParticle(ParticleTypes.END_ROD, p.x, p.y, p.z, 0.0, 0.0, 0.0);
-            spawned++;
         }
     }
 }
